@@ -1,0 +1,122 @@
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+// 물리 상수 및 초기값 설정
+const g = 1;      // 중력
+const m1 = 10;    // 첫 번째 추 질량
+const m2 = 10;    // 두 번째 추 질량
+const r1 = 150;   // 첫 번째 막대 길이
+const r2 = 150;   // 두 번째 막대 길이
+
+let a1 = Math.PI / 2; // 첫 번째 추 시작 각도 (90도)
+let a2 = Math.PI / 2.01; // 두 번째 추 시작 각도 (살짝 비틀어서 카오스 유도)
+let a1_v = 0;     // 각속도
+let a2_v = 0;
+let a1_a = 0;     // 각가속도
+let a2_a = 0;
+
+let cx = canvas.width / 2;
+let cy = 200; // 중심축 위치
+
+let path = []; // 궤적을 저장할 배열 (x, y 데이터)
+let timeStep = 0; // 데이터 기록용 시간
+
+function calculatePhysics() {
+    // 이중 진자의 복잡한 물리 공식 (라그랑주 역학)
+    let num1 = -g * (2 * m1 + m2) * Math.sin(a1);
+    let num2 = -m2 * g * Math.sin(a1 - 2 * a2);
+    let num3 = -2 * Math.sin(a1 - a2) * m2;
+    let num4 = a2_v * a2_v * r2 + a1_v * a1_v * r1 * Math.cos(a1 - a2);
+    let den = r1 * (2 * m1 + m2 - m2 * Math.cos(2 * a1 - 2 * a2));
+    a1_a = (num1 + num2 + num3 * num4) / den;
+
+    num1 = 2 * Math.sin(a1 - a2);
+    num2 = (a1_v * a1_v * r1 * (m1 + m2));
+    num3 = g * (m1 + m2) * Math.cos(a1);
+    num4 = a2_v * a2_v * r2 * m2 * Math.cos(a1 - a2);
+    den = r2 * (2 * m1 + m2 - m2 * Math.cos(2 * a1 - 2 * a2));
+    a2_a = (num1 * (num2 + num3 + num4)) / den;
+
+    a1_v += a1_a;
+    a2_v += a2_a;
+    a1 += a1_v;
+    a2 += a2_v;
+
+    // 마찰력 (계속 영원히 움직이게 하려면 1, 서서히 멈추게 하려면 0.999)
+    a1_v *= 0.999;
+    a2_v *= 0.999;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    calculatePhysics();
+
+    // 추의 현재 직교 좌표(x, y) 계산
+    let x1 = cx + r1 * Math.sin(a1);
+    let y1 = cy + r1 * Math.cos(a1);
+    let x2 = x1 + r2 * Math.sin(a2);
+    let y2 = y1 + r2 * Math.cos(a2);
+
+    // 궤적 데이터 수집 (매 프레임마다 저장)
+    path.push({ t: timeStep++, x: x2.toFixed(2), y: y2.toFixed(2) });
+    if (path.length > 500) {
+        path.shift(); // 꼬리가 너무 길어지면 앞부분 자르기 (시각화용)
+    }
+
+    // 궤적 그리기 (네온 효과)
+    ctx.beginPath();
+    for (let i = 0; i < path.length; i++) {
+        ctx.lineTo(path[i].x, path[i].y);
+    }
+    ctx.strokeStyle = "rgba(255, 100, 100, 0.5)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 막대 그리기
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 중심축과 추 그리기
+    ctx.fillStyle = "white";
+    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "blue";
+    ctx.beginPath(); ctx.arc(x1, y1, m1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "red";
+    ctx.beginPath(); ctx.arc(x2, y2, m2, 0, Math.PI * 2); ctx.fill();
+
+    requestAnimationFrame(draw); // 무한 루프
+}
+
+// 버튼 이벤트: 초기화
+document.getElementById('resetBtn').addEventListener('click', () => {
+    a1 = Math.PI / 2;
+    a2 = Math.PI / 2.01; // 시작 각도 리셋
+    a1_v = 0; a2_v = 0;
+    path = [];
+    timeStep = 0;
+});
+
+// 버튼 이벤트: 데이터 모아서 CSV 다운로드
+document.getElementById('downloadBtn').addEventListener('click', () => {
+    let csvContent = "data:text/csv;charset=utf-8,Time,X,Y\n";
+    path.forEach(row => {
+        csvContent += `${row.t},${row.x},${row.y}\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "chaos_trajectory.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
+
+// 시뮬레이션 시작!
+draw();
